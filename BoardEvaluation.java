@@ -29,12 +29,19 @@ public class BoardEvaluation {
     private static final int NORMAL_PIECE_VALUE = 80;  // Lower value for pushed pieces
     
     // Bonus values - Heavy emphasis on advancement and pusher mobility
-    private static final int CAPTURE_PUSHER_BONUS = 300;
-    private static final int CAPTURE_NORMAL_BONUS = 120;
-    private static final int CENTER_CONTROL_BONUS = 15;
+    private static final int CAPTURE_PUSHER_BONUS = 5000;    // MASSIVE bonus for capturing pushers
+    private static final int CAPTURE_NORMAL_BONUS = 2000;    // Large bonus for capturing pushed pieces
+    private static final int CENTER_CONTROL_BONUS = 25;      // Increased center control bonus
     private static final int ADVANCEMENT_BONUS = 100;   // Much higher advancement bonus
     private static final int PUSHER_MOBILITY_BONUS = 40; // Bonus for pusher moves
     private static final int NEAR_GOAL_BONUS = 10000;    // MASSIVE bonus for being very close to goal
+    private static final int PUSHER_BEHIND_PUSHED_BONUS = 1000; // Big bonus for pusher-pushed formations
+    
+    // NEW: Piece preservation and positioning penalties/bonuses
+    private static final int PIECE_EXPOSURE_PENALTY = 3000;    // Much higher penalty for pieces exposed to capture
+    private static final int EDGE_COLUMN_PENALTY = 200;       // Penalty for pieces on edge columns A/H
+    private static final int CENTER_COLUMN_BONUS = 150;       // Extra bonus for center columns C-F
+    private static final int SAFE_POSITION_BONUS = 1000;      // Bonus for pieces in safe positions
     
     /**
      * Evaluates the board position for the given color
@@ -117,14 +124,26 @@ public class BoardEvaluation {
                     // Add center control bonus (same for both types)
                     score += getCenterControlBonus(row, col);
                     
+                    // NEW: Add center column bonus and edge column penalty
+                    score += getCenterColumnBonus(row, col);
+                    
                 } else {
-                    // Enemy pieces - subtract value (but we'll make final result positive)
+                    // Enemy pieces - subtract value AND calculate capture bonuses
                     if (isPusher) {
                         enemyPushers++;
                         score -= PUSHER_VALUE;
+                        
+                        // CRITICAL: Heavy penalty for enemy pushers close to our goal
+                        int enemyAdvancement = getEnemyAdvancementThreat(row, !isRed);
+                        score -= enemyAdvancement * 1000; // Massive penalty for advanced enemies
+                        
                     } else {
                         enemyNormal++;
                         score -= NORMAL_PIECE_VALUE;
+                        
+                        // Penalty for enemy pushed pieces close to our goal
+                        int enemyAdvancement = getEnemyAdvancementThreat(row, !isRed);
+                        score -= enemyAdvancement * 500;
                     }
                     
                     // Subtract enemy positional advantages
@@ -135,6 +154,12 @@ public class BoardEvaluation {
         
         // Winning condition bonuses
         score += getWinningConditionBonus(myPushers, myNormal, enemyPushers, enemyNormal, board, isRed);
+        
+        // CRITICAL: Bonus for good pusher-pushed formations
+        score += getPusherBehindPushedBonus(board, isRed);
+        
+        // NEW: Apply piece preservation penalties - check for exposed pieces
+        score -= getPieceExposurePenalty(board, isRed);
         
         // For empty board, return base value only
         if (myPushers == 0 && myNormal == 0 && enemyPushers == 0 && enemyNormal == 0) {
@@ -174,6 +199,19 @@ public class BoardEvaluation {
         
         // Pushers get double advancement bonus to encourage their movement
         return isPusher ? baseBonus * 2 : baseBonus;
+    }
+    
+    /**
+     * Calculates how threatening an enemy piece is based on its advancement toward our goal
+     */
+    private static int getEnemyAdvancementThreat(int row, boolean enemyIsRed) {
+        if (enemyIsRed) {
+            // Red enemy advances towards row 0 - more threatening the lower the row
+            return (7 - row); // 0-7, higher value = more threatening
+        } else {
+            // Black enemy advances towards row 7 - more threatening the higher the row  
+            return row; // 0-7, higher value = more threatening
+        }
     }
     
     /**
@@ -283,5 +321,188 @@ public class BoardEvaluation {
         }
         
         return 0;
+    }
+    
+    /**
+     * Calculates bonus for having pushers positioned behind pushed pieces
+     * This formation allows for forward advancement
+     */
+    private static int getPusherBehindPushedBonus(char[][] board, boolean isRed) {
+        int bonus = 0;
+        char myPusher = isRed ? 'R' : 'B';
+        char myPushed = isRed ? 'r' : 'b';
+        int direction = isRed ? -1 : 1; // Direction pushers need to be relative to pushed pieces
+        
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                char piece = board[row][col];
+                
+                // Find our pushed pieces
+                if (piece == myPushed) {
+                    // Check if there's a pusher behind this pushed piece
+                    int pusherRow = row - direction; // Behind the pushed piece
+                    
+                    // Check straight behind
+                    if (pusherRow >= 0 && pusherRow < 8 && board[pusherRow][col] == myPusher) {
+                        bonus += PUSHER_BEHIND_PUSHED_BONUS;
+                        
+                        // Extra bonus if this formation is advancing
+                        int advancementLevel = getAdvancementLevel(row, isRed);
+                        bonus += advancementLevel * 200; // More bonus for advanced formations
+                    }
+                    
+                    // Check diagonal behind positions too
+                    if (pusherRow >= 0 && pusherRow < 8) {
+                        if (col > 0 && board[pusherRow][col - 1] == myPusher) {
+                            bonus += PUSHER_BEHIND_PUSHED_BONUS / 2; // Half bonus for diagonal support
+                        }
+                        if (col < 7 && board[pusherRow][col + 1] == myPusher) {
+                            bonus += PUSHER_BEHIND_PUSHED_BONUS / 2; // Half bonus for diagonal support
+                        }
+                    }
+                }
+            }
+        }
+        
+        return bonus;
+    }
+    
+    /**
+     * Gets advancement level (0-7) for bonus calculations
+     */
+    private static int getAdvancementLevel(int row, boolean isRed) {
+        if (isRed) {
+            return 7 - row; // Red: row 0 = level 7, row 7 = level 0
+        } else {
+            return row; // Black: row 7 = level 7, row 0 = level 0
+        }
+    }
+    
+    /**
+     * NEW: Calculates center column bonus and edge column penalty
+     * Strongly encourage center play and discourage edge play
+     */
+    private static int getCenterColumnBonus(int row, int col) {
+        // Penalty for edge columns A (0) and H (7)
+        if (col == 0 || col == 7) {
+            return -EDGE_COLUMN_PENALTY;
+        }
+        
+        // Extra bonus for center columns C-F (2-5)
+        if (col >= 2 && col <= 5) {
+            return CENTER_COLUMN_BONUS;
+        }
+        
+        // Columns B and G get no bonus/penalty
+        return 0;
+    }
+    
+    /**
+     * NEW: Calculates penalty for pieces that are exposed to enemy capture
+     * This helps preserve our pieces by avoiding dangerous positions
+     */
+    private static int getPieceExposurePenalty(char[][] board, boolean isRed) {
+        int penalty = 0;
+        char myPusher = isRed ? 'R' : 'B';
+        char myPushed = isRed ? 'r' : 'b';
+        
+        // Check each of our pieces to see if they can be captured
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                char piece = board[row][col];
+                
+                // Check if this is one of our pieces
+                if (piece == myPusher || piece == myPushed) {
+                    // Check if this piece can be captured by enemy pieces
+                    if (canBeCapturedByEnemy(board, row, col, isRed)) {
+                        // Higher penalty for pushers being exposed
+                        if (piece == myPusher) {
+                            penalty += PIECE_EXPOSURE_PENALTY * 2; // Double penalty for exposed pushers
+                        } else {
+                            penalty += PIECE_EXPOSURE_PENALTY;
+                        }
+                        
+                        // Extra penalty if the piece is advanced (losing advanced pieces is worse)
+                        int advancementLevel = getAdvancementLevel(row, isRed);
+                        if (advancementLevel >= 4) { // Advanced pieces
+                            penalty += PIECE_EXPOSURE_PENALTY / 2;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return penalty;
+    }
+    
+    /**
+     * NEW: Checks if a piece at the given position can be captured by enemy pieces
+     */
+    private static boolean canBeCapturedByEnemy(char[][] board, int row, int col, boolean isRed) {
+        char enemyPusher = isRed ? 'B' : 'R';
+        
+        // Check all possible enemy piece positions that could capture this piece
+        // Pushers can move in any direction, pushed pieces can only be pushed
+        
+        // Check for enemy pushers that can move to capture this piece
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                if (board[r][c] == enemyPusher) {
+                    // Check if this enemy pusher can move to capture our piece
+                    if (canPusherMoveTo(r, c, row, col)) {
+                        return true;
+                    }
+                    
+                    // Check if this enemy pusher can push another piece to capture ours
+                    if (canPusherPushTo(board, r, c, row, col, !isRed)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * NEW: Checks if a pusher can move directly to the target position
+     */
+    private static boolean canPusherMoveTo(int fromRow, int fromCol, int toRow, int toCol) {
+        // Pushers can move one square in any direction (including diagonally)
+        int rowDiff = Math.abs(toRow - fromRow);
+        int colDiff = Math.abs(toCol - fromCol);
+        
+        return (rowDiff <= 1 && colDiff <= 1) && !(rowDiff == 0 && colDiff == 0);
+    }
+    
+    /**
+     * NEW: Checks if a pusher can push another piece to the target position
+     */
+    private static boolean canPusherPushTo(char[][] board, int pusherRow, int pusherCol, int targetRow, int targetCol, boolean enemyIsRed) {
+        char enemyPushed = enemyIsRed ? 'r' : 'b';
+        
+        // Check all 8 directions from the pusher
+        int[] dr = {-1, -1, -1, 0, 0, 1, 1, 1};
+        int[] dc = {-1, 0, 1, -1, 1, -1, 0, 1};
+        
+        for (int dir = 0; dir < 8; dir++) {
+            int pushedRow = pusherRow + dr[dir];
+            int pushedCol = pusherCol + dc[dir];
+            
+            // Check if there's a pushed piece here
+            if (pushedRow >= 0 && pushedRow < 8 && pushedCol >= 0 && pushedCol < 8) {
+                if (board[pushedRow][pushedCol] == enemyPushed) {
+                    // Check if pushing this piece would land it on the target
+                    int newRow = pushedRow + dr[dir];
+                    int newCol = pushedCol + dc[dir];
+                    
+                    if (newRow == targetRow && newCol == targetCol) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        return false;
     }
 }

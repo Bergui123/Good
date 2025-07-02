@@ -1,8 +1,10 @@
 import java.util.Random;
+import java.util.List;
+import java.util.ArrayList;
 
 public class MiniMax {
-    private static final int MAX_DEPTH = 8; // Reduced depth for faster response
-    private static final long TIME_LIMIT = 3000; // 3 seconds in milliseconds (faster)
+    private static final int MAX_DEPTH = 3; // Reduced to 3 for faster response
+    private static final long TIME_LIMIT = 1000; // 1 second for much faster response
     private static final int POSITIVE_INFINITY = 1000000;
     private static final int NEGATIVE_INFINITY = -1000000;
     
@@ -38,26 +40,34 @@ public class MiniMax {
         // Order moves to prioritize pusher moves and advancement
         possibleMoves = orderMoves(possibleMoves, board, color);
         
-        // CRITICAL: Check for immediate winning moves first
+        // IMMEDIATE SAFETY CHECK: Return safe captures instantly for maximum efficiency
         for (String moveStr : possibleMoves) {
-            Board tempBoard = copyBoard(board);
-            Board.Move move = tempBoard.parseMove(moveStr);
-            
-            if (move != null && tempBoard.makeMove(move)) {
-                // Check if this move wins the game immediately
-                if (tempBoard.hasWinner()) {
+            Board.Move move = board.parseMove(moveStr);
+            if (move != null) {
+                int targetPiece = board.getPiece(move.toRow, move.toCol);
+                
+                // Check for captures first
+                if (targetPiece != Board.EMPTY) {
+                    // Quick safety check - if capture is safe, return immediately
+                    if (!willBeExposedToCapture(board, move, color)) {
+                        return moveStr; // Return immediately for efficiency!
+                    }
+                }
+                
+                // Check for winning moves
+                Board tempBoard = copyBoard(board);
+                if (tempBoard.makeMove(move) && tempBoard.hasWinner()) {
                     String winner = tempBoard.getWinner();
                     if ((color.equalsIgnoreCase("red") && "Red".equals(winner)) ||
                         (color.equalsIgnoreCase("black") && "Black".equals(winner))) {
-                        System.out.println("WINNING MOVE DETECTED: " + moveStr);
                         return moveStr; // Return winning move immediately!
                     }
                 }
             }
         }
         
-        // Iterative deepening - start with depth 1 and increase
-        for (int depth = 1; depth <= MAX_DEPTH && !timeUp; depth++) {
+        // Simplified iterative deepening - start with depth 2 for speed
+        for (int depth = 2; depth <= MAX_DEPTH && !timeUp; depth++) {
             String currentBestMove = null;
             int currentBestScore = NEGATIVE_INFINITY;
             
@@ -239,78 +249,135 @@ public class MiniMax {
     }
     
     /**
-     * Order moves to prioritize pusher moves and advancement
+     * Optimized move ordering for maximum pruning efficiency
      */
     private String[] orderMoves(String[] moves, Board board, String color) {
-        // Create array of move scores for ordering
-        MoveScore[] moveScores = new MoveScore[moves.length];
+        // Quick pre-filtering for immediate returns
+        List<String> safeCaptures = new ArrayList<>();
+        List<String> safeMoves = new ArrayList<>();
+        List<String> riskyMoves = new ArrayList<>();
         
-        for (int i = 0; i < moves.length; i++) {
-            moveScores[i] = new MoveScore(moves[i], scoreMoveForOrdering(moves[i], board, color));
-        }
-        
-        // Sort by score (highest first)
-        java.util.Arrays.sort(moveScores, (a, b) -> Integer.compare(b.score, a.score));
-        
-        // Extract sorted moves
-        String[] sortedMoves = new String[moves.length];
-        for (int i = 0; i < moves.length; i++) {
-            sortedMoves[i] = moveScores[i].move;
-        }
-        
-        return sortedMoves;
-    }
-    
-    /**
-     * Score a move for ordering purposes (not evaluation)
-     */
-    private int scoreMoveForOrdering(String moveStr, Board board, String color) {
-        Board.Move move = board.parseMove(moveStr);
-        if (move == null) return 0;
-        
-        int piece = board.getPiece(move.fromRow, move.fromCol);
-        int score = 0;
-        
-        // Heavily favor pusher moves
-        if (piece == Board.RED_PUSHER || piece == Board.BLACK_PUSHER) {
-            score += 100;
-        }
-        
-        // Favor advancement moves
-        boolean isRed = color.equalsIgnoreCase("red");
-        if (isRed && move.toRow < move.fromRow) { // Red advancing north
-            score += 50 + (move.fromRow - move.toRow) * 10;
-        } else if (!isRed && move.toRow > move.fromRow) { // Black advancing south
-            score += 50 + (move.toRow - move.fromRow) * 10;
-        }
-        
-        // Favor captures
-        int targetPiece = board.getPiece(move.toRow, move.toCol);
-        if (targetPiece != Board.EMPTY) {
-            score += 30;
-            if (targetPiece == Board.RED_PUSHER || targetPiece == Board.BLACK_PUSHER) {
-                score += 50; // Extra for capturing pushers
+        for (String moveStr : moves) {
+            Board.Move move = board.parseMove(moveStr);
+            if (move == null) continue;
+            
+            int targetPiece = board.getPiece(move.toRow, move.toCol);
+            boolean isCapture = (targetPiece != Board.EMPTY);
+            boolean isSafe = !willBeExposedToCapture(board, move, color);
+            
+            if (isCapture && isSafe) {
+                safeCaptures.add(moveStr); // Highest priority
+            } else if (isSafe) {
+                safeMoves.add(moveStr); // Medium priority
+            } else {
+                riskyMoves.add(moveStr); // Lowest priority
             }
         }
         
-        // Favor center control
-        if (move.toCol >= 2 && move.toCol <= 5) {
-            score += 10;
-        }
+        // Combine in priority order
+        List<String> orderedMoves = new ArrayList<>();
+        orderedMoves.addAll(safeCaptures);
+        orderedMoves.addAll(safeMoves);
+        orderedMoves.addAll(riskyMoves);
         
-        return score;
+        return orderedMoves.toArray(new String[0]);
     }
     
     /**
-     * Helper class for move ordering
+     * Calculate how threatening an enemy piece is based on its position
      */
-    private static class MoveScore {
-        String move;
-        int score;
-        
-        MoveScore(String move, int score) {
-            this.move = move;
-            this.score = score;
+    private int getEnemyThreatLevel(int row, boolean weAreRed) {
+        if (weAreRed) {
+            // We are red, enemy is black advancing toward row 7
+            // Enemy at row 0 = threat 0, enemy at row 7 = threat 7
+            return row;
+        } else {
+            // We are black, enemy is red advancing toward row 0  
+            // Enemy at row 7 = threat 0, enemy at row 0 = threat 7
+            return 7 - row;
         }
+    }
+    
+    /**
+     * CRITICAL: Ultra-fast check if a move will expose our piece to enemy capture
+     * Optimized for speed with early termination
+     */
+    private boolean willBeExposedToCapture(Board board, Board.Move move, String color) {
+        // Create a temporary board to test the move
+        Board tempBoard = copyBoard(board);
+        if (!tempBoard.makeMove(move)) {
+            return false; // Invalid move
+        }
+        
+        boolean isRed = color.equalsIgnoreCase("red");
+        
+        // Fast check: only look at enemy pieces that could potentially reach our destination
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                int piece = tempBoard.getPiece(row, col);
+                
+                // Skip empty squares and our own pieces
+                if (piece == Board.EMPTY) continue;
+                boolean isPieceRed = (piece == Board.RED_PUSHER || piece == Board.RED_PUSHED);
+                if (isPieceRed == isRed) continue; // Skip our own pieces
+                
+                // Quick distance check - if too far, skip detailed move generation
+                int distance = Math.abs(row - move.toRow) + Math.abs(col - move.toCol);
+                if (distance > 2) continue; // Enemy pieces more than 2 squares away can't capture in one move
+                
+                // Check if this enemy piece can capture our piece
+                if (canPieceCapturePosition(tempBoard, row, col, move.toRow, move.toCol)) {
+                    return true; // Exposed to capture!
+                }
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Fast check if a piece at (fromRow, fromCol) can capture position (toRow, toCol)
+     */
+    private boolean canPieceCapturePosition(Board board, int fromRow, int fromCol, int toRow, int toCol) {
+        int piece = board.getPiece(fromRow, fromCol);
+        if (piece == Board.EMPTY) return false;
+        
+        boolean isPusher = (piece == Board.RED_PUSHER || piece == Board.BLACK_PUSHER);
+        boolean isRed = (piece == Board.RED_PUSHER || piece == Board.RED_PUSHED);
+        
+        if (isPusher) {
+            // Pusher movement rules
+            int direction = isRed ? -1 : 1; // Red moves up (-1), Black moves down (+1)
+            
+            // Can move diagonally forward to capture
+            if (toRow == fromRow + direction && Math.abs(toCol - fromCol) == 1) {
+                return true;
+            }
+        }
+        
+        // For pushed pieces, we'd need to check if there's a pusher behind them
+        // But for efficiency, we'll do a simplified check
+        
+        return false;
+    }
+    
+    /**
+     * Enhanced threat detection - check if any of our pieces are under immediate threat
+     */
+    private boolean isUnderImmediateThreat(Board board, int row, int col, String color) {
+        boolean isRed = color.equalsIgnoreCase("red");
+        String enemyColor = isRed ? "black" : "red";
+        
+        // Get all enemy moves and see if any target this position
+        String[] enemyMoves = MoveGenerator.move(enemyColor, board);
+        
+        for (String enemyMoveStr : enemyMoves) {
+            Board.Move enemyMove = board.parseMove(enemyMoveStr);
+            if (enemyMove != null && enemyMove.toRow == row && enemyMove.toCol == col) {
+                return true; // This piece is under threat!
+            }
+        }
+        
+        return false;
     }
 }

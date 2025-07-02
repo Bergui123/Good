@@ -52,6 +52,21 @@ class Client {
     System.out.println("Finding best move for RED...");
     String move = miniMax.findBestMove(board, "red");
     System.out.println("Best move found: " + move);
+    
+    // NEW: Fallback to random move if no best move found
+    if (move == null) {
+        System.out.println("No best move found, selecting random legal move...");
+        
+        String[] possibleMoves = MoveGenerator.move("red", board);
+        if (possibleMoves != null && possibleMoves.length > 0) {
+            java.util.Random random = new java.util.Random();
+            move = possibleMoves[random.nextInt(possibleMoves.length)];
+            System.out.println("Random move selected: " + move);
+        } else {
+            System.err.println("ERROR: No moves available at all!");
+        }
+    }
+    
     if (move != null) {
         board.makeMoveFromServer(move);
         output.write(move.getBytes(), 0, move.length());
@@ -88,10 +103,16 @@ if(cmd == '2'){
         if (size > 0) {
             input.read(aBuffer, 0, Math.min(size, aBuffer.length));
             String opponentMove = new String(aBuffer, 0, size).trim();
-            System.out.println("Opponent's move received: " + opponentMove);
+            System.out.println("Opponent's move received: '" + opponentMove + "' (length=" + opponentMove.length() + ")");
+            
             // Apply opponent's move to our board
             if (!opponentMove.isEmpty()) {
-                board.makeMoveFromServer(opponentMove);
+                boolean moveSuccess = board.makeMoveFromServer(opponentMove);
+                if (!moveSuccess) {
+                    System.out.println("WARNING: Failed to apply opponent move: " + opponentMove);
+                }
+            } else {
+                System.out.println("WARNING: Received empty opponent move!");
             }
         }
         
@@ -101,8 +122,25 @@ if(cmd == '2'){
             continue; // Skip this command and wait for proper initialization
         }
         System.out.println("Finding best move for " + myColor.toUpperCase() + "...");
+        
         String move = miniMax.findBestMove(board, myColor);
         System.out.println("Best move found: " + move);
+        
+        // NEW: Fallback to random move if no best move found
+        if (move == null) {
+            System.out.println("No best move found, selecting random legal move...");
+            
+            String[] possibleMoves = MoveGenerator.move(myColor, board);
+            if (possibleMoves != null && possibleMoves.length > 0) {
+                java.util.Random random = new java.util.Random();
+                move = possibleMoves[random.nextInt(possibleMoves.length)];
+                System.out.println("Random move selected: " + move);
+            } else {
+                System.err.println("ERROR: No moves available at all!");
+                continue; // Skip this turn
+            }
+        }
+        
         if (move != null) {
             board.makeMoveFromServer(move);
             output.write(move.getBytes(), 0, move.length());
@@ -120,11 +158,16 @@ if(cmd == '2'){
                 if (size > 0) {
                     input.read(aBuffer, 0, Math.min(size, aBuffer.length));
                     String opponentMove = new String(aBuffer, 0, size).trim();
-                    System.out.println("Opponent's move received: " + opponentMove);
-                    // Apply opponent's move to our board
-                    if (!opponentMove.isEmpty()) {
-                        board.makeMoveFromServer(opponentMove);
+                    System.out.println("Opponent's move received: '" + opponentMove + "' (length=" + opponentMove.length() + ")");
+                          // Apply opponent's move to our board
+                if (!opponentMove.isEmpty()) {
+                    boolean moveSuccess = board.makeMoveFromServer(opponentMove);
+                    if (!moveSuccess) {
+                        System.out.println("WARNING: Failed to apply opponent move: " + opponentMove);
                     }
+                } else {
+                    System.out.println("WARNING: Received empty opponent move!");
+                }
                 }
                 
                 // Find our best move using our tracked color
@@ -133,8 +176,25 @@ if(cmd == '2'){
                     continue; // Skip this command and wait for proper initialization
                 }
                 System.out.println("Finding best move for " + myColor.toUpperCase() + "...");
+                
                 String move = miniMax.findBestMove(board, myColor);
                 System.out.println("Best move found: " + move);
+                
+                // NEW: Fallback to random move if no best move found
+                if (move == null) {
+                    System.out.println("No best move found, selecting random legal move...");
+                    
+                    String[] possibleMoves = MoveGenerator.move(myColor, board);
+                    if (possibleMoves != null && possibleMoves.length > 0) {
+                        java.util.Random random = new java.util.Random();
+                        move = possibleMoves[random.nextInt(possibleMoves.length)];
+                        System.out.println("Random move selected: " + move);
+                    } else {
+                        System.err.println("ERROR: No moves available at all!");
+                        continue; // Skip this turn
+                    }
+                }
+                
                 if (move != null) {
                     board.makeMoveFromServer(move);
                     output.write(move.getBytes(), 0, move.length());

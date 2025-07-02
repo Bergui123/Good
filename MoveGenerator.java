@@ -5,15 +5,61 @@ public class MoveGenerator {
     public static String[] move(String color, Board board) {
         List<String> moves = new ArrayList<>();
         
+        // DEBUG: Add comprehensive logging when no moves are found
+        int colorPieceCount = 0;
+        int totalPieces = 0;
+        
         // Check every tile in the board (8x8)
         for (int row = 0; row < 8; row++) {
             for (int col = 0; col < 8; col++) {
                 int pieceValue = board.getPiece(row, col);
                 
+                if (pieceValue != Board.EMPTY) {
+                    totalPieces++;
+                }
+                
                 // Generate moves for ALL pieces that belong to the current player
                 // Both pushers and pushed pieces can generate moves
                 if (isPieceOfColor(pieceValue, color)) {
-                    moves.addAll(PossibleMoves(pieceValue, col, row, board));
+                    colorPieceCount++;
+                    List<String> pieceMoves = PossibleMoves(pieceValue, col, row, board);
+                    
+                    // DEBUG: Log piece-specific move generation when debugging needed
+                    if (pieceMoves.isEmpty()) {
+                        String pos = board.positionToString(row, col);
+                        String pieceDesc = getPieceDescription(pieceValue);
+                        System.out.println("DEBUG: " + pieceDesc + " at " + pos + " has no moves");
+                    }
+                    
+                    moves.addAll(pieceMoves);
+                }
+            }
+        }
+        
+        // DEBUG: Log detailed info if no moves found for a color that has pieces
+        if (moves.isEmpty() && colorPieceCount > 0) {
+            System.out.println("CRITICAL BUG: " + color + " has " + colorPieceCount + " pieces but NO MOVES!");
+            System.out.println("Total pieces on board: " + totalPieces);
+            System.out.println("Board state when no moves found:");
+            board.printBoard();
+            
+            // Re-scan and log each piece and why it has no moves
+            for (int row = 0; row < 8; row++) {
+                for (int col = 0; col < 8; col++) {
+                    int pieceValue = board.getPiece(row, col);
+                    if (isPieceOfColor(pieceValue, color)) {
+                        String pos = board.positionToString(row, col);
+                        String pieceDesc = getPieceDescription(pieceValue);
+                        System.out.println("Analyzing " + pieceDesc + " at " + pos + ":");
+                        
+                        List<String> pieceMoves = PossibleMoves(pieceValue, col, row, board);
+                        if (pieceMoves.isEmpty()) {
+                            System.out.println("  No moves available - checking why...");
+                            debugWhyNoMoves(pieceValue, col, row, board);
+                        } else {
+                            System.out.println("  Has " + pieceMoves.size() + " moves: " + pieceMoves);
+                        }
+                    }
                 }
             }
         }
@@ -133,8 +179,10 @@ public class MoveGenerator {
                         }
                         else if (isOppositeColor(pieceValue, frontPiece))
                         {
-                            // Can capture forward (only on diagonal, but this is straight)
-                            // Actually, pushed pieces can only capture diagonally, not straight
+                            // Pushed pieces CAN capture straight forward when pushed by a pusher
+                            String fromPos = board.positionToString(row, col);
+                            String toPos = board.positionToString(frontRow, col);
+                            moves.add(fromPos + toPos);
                         }
                     }
                 }
@@ -236,17 +284,6 @@ public class MoveGenerator {
         
         return false;
     }
-
-    // Helper method to check if pusher piece can push the other piece (same color pushed piece)
-    private static boolean isSameColorPushedPiece(int pusherPiece, int otherPiece) {
-        if (pusherPiece == Board.BLACK_PUSHER && otherPiece == Board.BLACK_PUSHED) {
-            return true;
-        }
-        if (pusherPiece == Board.RED_PUSHER && otherPiece == Board.RED_PUSHED) {
-            return true;
-        }
-        return false;
-    }
     
     // Helper method to check if a piece is a pusher of the same color as the pushed piece
     private static boolean isPusherOfSameColor(int pushedPiece, int pusherPiece) {
@@ -257,5 +294,81 @@ public class MoveGenerator {
             return true;
         }
         return false;
+    }
+
+    // Debug method to analyze why a piece has no available moves
+    private static void debugWhyNoMoves(int pieceValue, int col, int row, Board board) {
+        String pieceDesc = getPieceDescription(pieceValue);
+        
+        if (pieceDesc.equals("Black Pusher") || pieceDesc.equals("Red Pusher")) {
+            int direction = pieceDesc.startsWith("Black") ? 1 : -1;
+            
+            // Check front
+            int frontRow = row + direction;
+            if (frontRow >= 0 && frontRow < 8) {
+                int frontPiece = board.getPiece(frontRow, col);
+                System.out.println("    Front (" + board.positionToString(frontRow, col) + "): " + getPieceDescription(frontPiece));
+                if (frontPiece != Board.EMPTY) {
+                    System.out.println("    Cannot move forward - blocked by " + getPieceDescription(frontPiece));
+                }
+            } else {
+                System.out.println("    Cannot move forward - edge of board");
+            }
+            
+            // Check diagonals
+            int diagLeftRow = row + direction;
+            int diagLeftCol = col - 1;
+            if (diagLeftRow >= 0 && diagLeftRow < 8 && diagLeftCol >= 0 && diagLeftCol < 8) {
+                int diagLeftPiece = board.getPiece(diagLeftRow, diagLeftCol);
+                System.out.println("    Diagonal left (" + board.positionToString(diagLeftRow, diagLeftCol) + "): " + getPieceDescription(diagLeftPiece));
+                if (diagLeftPiece != Board.EMPTY && !isOppositeColor(pieceValue, diagLeftPiece)) {
+                    System.out.println("    Cannot move diagonal left - occupied by same color");
+                }
+            } else {
+                System.out.println("    Cannot move diagonal left - edge of board");
+            }
+            
+            int diagRightRow = row + direction;
+            int diagRightCol = col + 1;
+            if (diagRightRow >= 0 && diagRightRow < 8 && diagRightCol >= 0 && diagRightCol < 8) {
+                int diagRightPiece = board.getPiece(diagRightRow, diagRightCol);
+                System.out.println("    Diagonal right (" + board.positionToString(diagRightRow, diagRightCol) + "): " + getPieceDescription(diagRightPiece));
+                if (diagRightPiece != Board.EMPTY && !isOppositeColor(pieceValue, diagRightPiece)) {
+                    System.out.println("    Cannot move diagonal right - occupied by same color");
+                }
+            } else {
+                System.out.println("    Cannot move diagonal right - edge of board");
+            }
+        } else if (pieceDesc.equals("Black Pushed") || pieceDesc.equals("Red Pushed")) {
+            int direction = pieceDesc.startsWith("Black") ? 1 : -1;
+            
+            System.out.println("    Pushed piece - checking for pushers behind...");
+            
+            // Check directly behind
+            int behindRow = row - direction;
+            int behindCol = col;
+            if (behindRow >= 0 && behindRow < 8) {
+                int behindPiece = board.getPiece(behindRow, behindCol);
+                System.out.println("    Behind (" + board.positionToString(behindRow, behindCol) + "): " + getPieceDescription(behindPiece));
+                if (!isPusherOfSameColor(pieceValue, behindPiece)) {
+                    System.out.println("    No pusher directly behind");
+                }
+            }
+            
+            // Check diagonal behind positions
+            int behindLeftRow = row - direction;
+            int behindLeftCol = col - 1;
+            if (behindLeftRow >= 0 && behindLeftRow < 8 && behindLeftCol >= 0 && behindLeftCol < 8) {
+                int behindLeftPiece = board.getPiece(behindLeftRow, behindLeftCol);
+                System.out.println("    Behind left (" + board.positionToString(behindLeftRow, behindLeftCol) + "): " + getPieceDescription(behindLeftPiece));
+            }
+            
+            int behindRightRow = row - direction;
+            int behindRightCol = col + 1;
+            if (behindRightRow >= 0 && behindRightRow < 8 && behindRightCol >= 0 && behindRightCol < 8) {
+                int behindRightPiece = board.getPiece(behindRightRow, behindRightCol);
+                System.out.println("    Behind right (" + board.positionToString(behindRightRow, behindRightCol) + "): " + getPieceDescription(behindRightPiece));
+            }
+        }
     }
 }
