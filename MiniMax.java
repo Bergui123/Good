@@ -35,8 +35,8 @@ public class MiniMax {
             return possibleMoves[0];
         }
         
-        // Shuffle moves to add variety when moves have equal evaluation
-        shuffleArray(possibleMoves);
+        // Order moves to prioritize pusher moves and advancement
+        possibleMoves = orderMoves(possibleMoves, board, color);
         
         // Iterative deepening - start with depth 1 and increase
         for (int depth = 1; depth <= MAX_DEPTH && !timeUp; depth++) {
@@ -58,6 +58,9 @@ public class MiniMax {
                     int score = minimax(tempBoard, depth - 1, NEGATIVE_INFINITY, POSITIVE_INFINITY, 
                                       false, opponentColor, color);
                     
+                    // Add small random factor to break ties and avoid repetition
+                    score += random.nextInt(3) - 1; // -1, 0, or 1
+                    
                     if (score > currentBestScore) {
                         currentBestScore = score;
                         currentBestMove = moveStr;
@@ -72,18 +75,6 @@ public class MiniMax {
         }
         
         return bestMove != null ? bestMove : possibleMoves[0];
-    }
-    
-    /**
-     * Shuffle array to add randomness to move selection when evaluations are equal
-     */
-    private void shuffleArray(String[] array) {
-        for (int i = array.length - 1; i > 0; i--) {
-            int index = random.nextInt(i + 1);
-            String temp = array[index];
-            array[index] = array[i];
-            array[i] = temp;
-        }
     }
     
     /**
@@ -118,6 +109,9 @@ public class MiniMax {
             // No moves available - evaluate current position
             return evaluatePosition(board, originalColor);
         }
+        
+        // Order moves for better alpha-beta pruning
+        possibleMoves = orderMoves(possibleMoves, board, currentColor);
         
         if (isMaximizing) {
             int maxEval = NEGATIVE_INFINITY;
@@ -224,5 +218,81 @@ public class MiniMax {
         copy.setRedPlayer(original.isRedPlayer());
         
         return copy;
+    }
+    
+    /**
+     * Order moves to prioritize pusher moves and advancement
+     */
+    private String[] orderMoves(String[] moves, Board board, String color) {
+        // Create array of move scores for ordering
+        MoveScore[] moveScores = new MoveScore[moves.length];
+        
+        for (int i = 0; i < moves.length; i++) {
+            moveScores[i] = new MoveScore(moves[i], scoreMoveForOrdering(moves[i], board, color));
+        }
+        
+        // Sort by score (highest first)
+        java.util.Arrays.sort(moveScores, (a, b) -> Integer.compare(b.score, a.score));
+        
+        // Extract sorted moves
+        String[] sortedMoves = new String[moves.length];
+        for (int i = 0; i < moves.length; i++) {
+            sortedMoves[i] = moveScores[i].move;
+        }
+        
+        return sortedMoves;
+    }
+    
+    /**
+     * Score a move for ordering purposes (not evaluation)
+     */
+    private int scoreMoveForOrdering(String moveStr, Board board, String color) {
+        Board.Move move = board.parseMove(moveStr);
+        if (move == null) return 0;
+        
+        int piece = board.getPiece(move.fromRow, move.fromCol);
+        int score = 0;
+        
+        // Heavily favor pusher moves
+        if (piece == Board.RED_PUSHER || piece == Board.BLACK_PUSHER) {
+            score += 100;
+        }
+        
+        // Favor advancement moves
+        boolean isRed = color.equalsIgnoreCase("red");
+        if (isRed && move.toRow < move.fromRow) { // Red advancing north
+            score += 50 + (move.fromRow - move.toRow) * 10;
+        } else if (!isRed && move.toRow > move.fromRow) { // Black advancing south
+            score += 50 + (move.toRow - move.fromRow) * 10;
+        }
+        
+        // Favor captures
+        int targetPiece = board.getPiece(move.toRow, move.toCol);
+        if (targetPiece != Board.EMPTY) {
+            score += 30;
+            if (targetPiece == Board.RED_PUSHER || targetPiece == Board.BLACK_PUSHER) {
+                score += 50; // Extra for capturing pushers
+            }
+        }
+        
+        // Favor center control
+        if (move.toCol >= 2 && move.toCol <= 5) {
+            score += 10;
+        }
+        
+        return score;
+    }
+    
+    /**
+     * Helper class for move ordering
+     */
+    private static class MoveScore {
+        String move;
+        int score;
+        
+        MoveScore(String move, int score) {
+            this.move = move;
+            this.score = score;
+        }
     }
 }

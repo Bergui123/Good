@@ -188,9 +188,6 @@ public class Board {
         if (isRedPlayer && !isRedPiece(piece)) return false;
         if (!isRedPlayer && !isBlackPiece(piece)) return false;
         
-        // Only pushers can move by themselves
-        if (!isPusher(piece)) return false;
-        
         // Check direction (can only move toward opponent's end)
         int direction = isRedPiece(piece) ? -1 : 1; // Red moves up (decreasing row), Black moves down
         int rowDiff = move.toRow - move.fromRow;
@@ -208,7 +205,17 @@ public class Board {
             if (isBlackPiece(piece) && isBlackPiece(targetPiece)) return false;
         }
         
-        return true;
+        // PUSHERS can always move by themselves (if above conditions are met)
+        if (isPusher(piece)) {
+            return true;
+        }
+        
+        // PUSHED PIECES can only move if there's a pusher behind them in the right position
+        if (isPushedPiece(piece)) {
+            return isPushedPieceMoveValid(move, piece);
+        }
+        
+        return false;
     }
     
     // Find pushed piece that would be moved by a pusher
@@ -291,6 +298,36 @@ public class Board {
         return piece == BLACK_PUSHER || piece == BLACK_PUSHED;
     }
     
+    private boolean isPushedPiece(int piece) {
+        return piece == RED_PUSHED || piece == BLACK_PUSHED;
+    }
+    
+    /**
+     * Check if a pushed piece move is valid (i.e., there's a pusher behind it in the right position)
+     */
+    private boolean isPushedPieceMoveValid(Move move, int pushedPiece) {
+        int rowDiff = move.toRow - move.fromRow;
+        int colDiff = move.toCol - move.fromCol;
+        
+        // Find where the pusher should be to enable this move
+        int pusherRow = move.fromRow - rowDiff;
+        int pusherCol = move.fromCol - colDiff;
+        
+        if (!isValidPosition(pusherRow, pusherCol)) return false;
+        
+        int pusherPiece = board[pusherRow][pusherCol];
+        
+        // Check if there's a pusher of the same color at the expected position
+        if (pushedPiece == RED_PUSHED && pusherPiece == RED_PUSHER) {
+            return true;
+        }
+        if (pushedPiece == BLACK_PUSHED && pusherPiece == BLACK_PUSHER) {
+            return true;
+        }
+        
+        return false;
+    }
+
     // Check win conditions
     public boolean isGameOver() {
         return hasWinner() || redPushers == 0 || blackPushers == 0;

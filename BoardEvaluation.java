@@ -1,38 +1,40 @@
 public class BoardEvaluation {
     
-    // First 8x8 matrix filled with ones
+    // Heavily favor advancement towards the goal with exponential bonuses
     private static final int[][] RedPlaceValue = {
-        {100, 100, 100, 100, 100, 100, 100, 100},
-        {100, 100, 100, 100, 100, 100, 100, 100},
-        {12, 12, 15, 15, 15, 15, 12, 12},
-        {4, 4, 6, 6, 6, 6, 4, 4},
-        {2, 2, 4, 4, 4, 4, 2, 2},
-        {2, 2, 4, 4, 4, 4, 2, 2},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0}
+        {1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000}, // Goal line - huge bonus
+        {500, 500, 600, 600, 600, 600, 500, 500},          // Almost there
+        {200, 200, 300, 300, 300, 300, 200, 200},          // Deep in enemy territory
+        {80, 80, 120, 120, 120, 120, 80, 80},              // Mid-board advancing
+        {30, 30, 50, 50, 50, 50, 30, 30},                  // Crossing center
+        {10, 10, 20, 20, 20, 20, 10, 10},                  // Still in own half
+        {5, 5, 10, 10, 10, 10, 5, 5},                      // Near starting position
+        {0, 0, 0, 0, 0, 0, 0, 0}                           // Starting line
     };
     
-    // Second 8x8 matrix - 180 degree flipped version of RedPlaceValue
+    // Mirror for black pieces (they advance towards row 7)
     private static final int[][] BlackPlaceValue = {
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0, 0},
-        {2, 2, 4, 4, 4, 4, 2, 2},
-        {2, 2, 4, 4, 4, 4, 2, 2},
-        {4, 4, 6, 6, 6, 6, 4, 4},
-        {12, 12, 15, 15, 15, 15, 12, 12},
-        {100, 100, 100, 100, 100, 100, 100, 100},
-        {100, 100, 100, 100, 100, 100, 100, 100}
+        {0, 0, 0, 0, 0, 0, 0, 0},                           // Starting line
+        {5, 5, 10, 10, 10, 10, 5, 5},                      // Near starting position
+        {10, 10, 20, 20, 20, 20, 10, 10},                  // Still in own half
+        {30, 30, 50, 50, 50, 50, 30, 30},                  // Crossing center
+        {80, 80, 120, 120, 120, 120, 80, 80},              // Mid-board advancing
+        {200, 200, 300, 300, 300, 300, 200, 200},          // Deep in enemy territory
+        {500, 500, 600, 600, 600, 600, 500, 500},          // Almost there
+        {1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000}  // Goal line - huge bonus
     };
     
-    // Piece values
-    private static final int PUSHER_VALUE = 100;
-    private static final int NORMAL_PIECE_VALUE = 50;
+    // Piece values - Pushers are significantly more valuable
+    private static final int PUSHER_VALUE = 200;       // Higher base value for pushers
+    private static final int NORMAL_PIECE_VALUE = 80;  // Lower value for pushed pieces
     
-    // Bonus values
-    private static final int CAPTURE_PUSHER_BONUS = 150;
-    private static final int CAPTURE_NORMAL_BONUS = 75;
-    private static final int CENTER_CONTROL_BONUS = 10;
-    private static final int ADVANCEMENT_BONUS = 5;
+    // Bonus values - Heavy emphasis on advancement and pusher mobility
+    private static final int CAPTURE_PUSHER_BONUS = 300;
+    private static final int CAPTURE_NORMAL_BONUS = 120;
+    private static final int CENTER_CONTROL_BONUS = 15;
+    private static final int ADVANCEMENT_BONUS = 25;   // Much higher advancement bonus
+    private static final int PUSHER_MOBILITY_BONUS = 40; // Bonus for pusher moves
+    private static final int NEAR_GOAL_BONUS = 100;    // Extra bonus for being very close to goal
     
     /**
      * Evaluates the board position for the given color
@@ -78,18 +80,41 @@ public class BoardEvaluation {
                     if (isPusher) {
                         myPushers++;
                         score += PUSHER_VALUE;
+                        // Extra bonus for pushers being mobile and advancing
+                        score += PUSHER_MOBILITY_BONUS;
+                        
+                        // CRITICAL: Pushers get MUCH higher positional and advancement bonuses
+                        // since they are the key to winning and can move independently
+                        int positionalValue = getPositionalValue(row, col, isRed);
+                        score += positionalValue * 3; // Triple positional bonus for pushers
+                        
+                        // Heavy advancement bonus for pushers
+                        score += getAdvancementBonus(row, isRed, isPusher) * 2;
+                        
+                        // Near goal bonus for pushers - they're the key to winning
+                        if ((isRed && row <= 1) || (!isRed && row >= 6)) {
+                            score += NEAR_GOAL_BONUS * 3; // Triple bonus for pushers near goal
+                        }
+                        
                     } else {
                         myNormal++;
                         score += NORMAL_PIECE_VALUE;
+                        
+                        // Pushed pieces get much smaller positional bonuses
+                        // since they depend on pushers to move
+                        int positionalValue = getPositionalValue(row, col, isRed);
+                        score += positionalValue / 2; // Half positional bonus for pushed pieces
+                        
+                        // Small advancement bonus for pushed pieces
+                        score += getAdvancementBonus(row, isRed, isPusher) / 2;
+                        
+                        // Small near goal bonus for pushed pieces
+                        if ((isRed && row <= 1) || (!isRed && row >= 6)) {
+                            score += NEAR_GOAL_BONUS / 2;
+                        }
                     }
                     
-                    // Add positional bonus
-                    score += getPositionalValue(row, col, isRed);
-                    
-                    // Add advancement bonus (closer to opponent's end)
-                    score += getAdvancementBonus(row, isRed);
-                    
-                    // Add center control bonus
+                    // Add center control bonus (same for both types)
                     score += getCenterControlBonus(row, col);
                     
                 } else {
@@ -135,15 +160,20 @@ public class BoardEvaluation {
     
     /**
      * Calculates advancement bonus - pieces closer to opponent's end get higher bonus
+     * Pushers get extra bonus for advancing
      */
-    private static int getAdvancementBonus(int row, boolean isRed) {
+    private static int getAdvancementBonus(int row, boolean isRed, boolean isPusher) {
+        int baseBonus;
         if (isRed) {
             // Red advances towards row 0 (top of board, black's territory)
-            return row * ADVANCEMENT_BONUS;
+            baseBonus = (7 - row) * ADVANCEMENT_BONUS;
         } else {
             // Black advances towards row 7 (bottom of board, red's territory)
-            return (7 - row) * ADVANCEMENT_BONUS;
+            baseBonus = row * ADVANCEMENT_BONUS;
         }
+        
+        // Pushers get double advancement bonus to encourage their movement
+        return isPusher ? baseBonus * 2 : baseBonus;
     }
     
     /**
@@ -183,6 +213,55 @@ public class BoardEvaluation {
         // Bonus for having more total pieces
         int totalAdvantage = (myPushers + myNormal) - (enemyPushers + enemyNormal);
         bonus += totalAdvantage * CAPTURE_NORMAL_BONUS;
+        
+        // Additional bonus for pushers in advanced positions that can push pieces forward
+        bonus += getPusherAdvancementBonus(board, isRed);
+        
+        return bonus;
+    }
+    
+    /**
+     * Special bonus for pushers that are in good positions to advance and push pieces
+     */
+    private static int getPusherAdvancementBonus(char[][] board, boolean isRed) {
+        int bonus = 0;
+        
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                char piece = board[row][col];
+                
+                // Check if this is our pusher
+                boolean isMyPusher = (isRed && piece == 'R') || (!isRed && piece == 'B');
+                
+                if (isMyPusher) {
+                    // Bonus for pushers in advanced positions
+                    if (isRed && row <= 3) { // Red pusher in upper half
+                        bonus += 50 * (4 - row); // More bonus for being closer to goal
+                    } else if (!isRed && row >= 4) { // Black pusher in lower half
+                        bonus += 50 * (row - 3); // More bonus for being closer to goal
+                    }
+                    
+                    // Check if this pusher can push a piece forward
+                    int direction = isRed ? -1 : 1;
+                    int frontRow = row + direction;
+                    int behindRow = row - direction;
+                    
+                    // Check if there's a pushed piece behind that can be pushed
+                    if (behindRow >= 0 && behindRow < 8) {
+                        char behindPiece = board[behindRow][col];
+                        boolean isPushedPieceBehind = (isRed && behindPiece == 'r') || (!isRed && behindPiece == 'b');
+                        
+                        if (isPushedPieceBehind && frontRow >= 0 && frontRow < 8) {
+                            char frontPiece = board[frontRow][col];
+                            if (frontPiece == ' ' || frontPiece == '\0') {
+                                // Can push piece forward - big bonus!
+                                bonus += 100;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
         return bonus;
     }
