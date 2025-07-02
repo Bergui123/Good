@@ -38,6 +38,24 @@ public class MiniMax {
         // Order moves to prioritize pusher moves and advancement
         possibleMoves = orderMoves(possibleMoves, board, color);
         
+        // CRITICAL: Check for immediate winning moves first
+        for (String moveStr : possibleMoves) {
+            Board tempBoard = copyBoard(board);
+            Board.Move move = tempBoard.parseMove(moveStr);
+            
+            if (move != null && tempBoard.makeMove(move)) {
+                // Check if this move wins the game immediately
+                if (tempBoard.hasWinner()) {
+                    String winner = tempBoard.getWinner();
+                    if ((color.equalsIgnoreCase("red") && "Red".equals(winner)) ||
+                        (color.equalsIgnoreCase("black") && "Black".equals(winner))) {
+                        System.out.println("WINNING MOVE DETECTED: " + moveStr);
+                        return moveStr; // Return winning move immediately!
+                    }
+                }
+            }
+        }
+        
         // Iterative deepening - start with depth 1 and increase
         for (int depth = 1; depth <= MAX_DEPTH && !timeUp; depth++) {
             String currentBestMove = null;

@@ -2,26 +2,26 @@ public class BoardEvaluation {
     
     // Heavily favor advancement towards the goal with exponential bonuses
     private static final int[][] RedPlaceValue = {
-        {1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000}, // Goal line - huge bonus
-        {500, 500, 600, 600, 600, 600, 500, 500},          // Almost there
-        {200, 200, 300, 300, 300, 300, 200, 200},          // Deep in enemy territory
-        {80, 80, 120, 120, 120, 120, 80, 80},              // Mid-board advancing
-        {30, 30, 50, 50, 50, 50, 30, 30},                  // Crossing center
-        {10, 10, 20, 20, 20, 20, 10, 10},                  // Still in own half
-        {5, 5, 10, 10, 10, 10, 5, 5},                      // Near starting position
-        {0, 0, 0, 0, 0, 0, 0, 0}                           // Starting line
+        {100000, 100000, 100000, 100000, 100000, 100000, 100000, 100000}, // Goal line - MASSIVE bonus
+        {50000, 50000, 60000, 60000, 60000, 60000, 50000, 50000},          // Almost there - huge bonus
+        {10000, 10000, 15000, 15000, 15000, 15000, 10000, 10000},          // Deep in enemy territory
+        {2000, 2000, 3000, 3000, 3000, 3000, 2000, 2000},                 // Mid-board advancing
+        {500, 500, 800, 800, 800, 800, 500, 500},                         // Crossing center
+        {100, 100, 200, 200, 200, 200, 100, 100},                         // Still in own half
+        {20, 20, 40, 40, 40, 40, 20, 20},                                  // Near starting position
+        {0, 0, 0, 0, 0, 0, 0, 0}                                           // Starting line
     };
     
     // Mirror for black pieces (they advance towards row 7)
     private static final int[][] BlackPlaceValue = {
-        {0, 0, 0, 0, 0, 0, 0, 0},                           // Starting line
-        {5, 5, 10, 10, 10, 10, 5, 5},                      // Near starting position
-        {10, 10, 20, 20, 20, 20, 10, 10},                  // Still in own half
-        {30, 30, 50, 50, 50, 50, 30, 30},                  // Crossing center
-        {80, 80, 120, 120, 120, 120, 80, 80},              // Mid-board advancing
-        {200, 200, 300, 300, 300, 300, 200, 200},          // Deep in enemy territory
-        {500, 500, 600, 600, 600, 600, 500, 500},          // Almost there
-        {1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000}  // Goal line - huge bonus
+        {0, 0, 0, 0, 0, 0, 0, 0},                                           // Starting line
+        {20, 20, 40, 40, 40, 40, 20, 20},                                  // Near starting position
+        {100, 100, 200, 200, 200, 200, 100, 100},                         // Still in own half
+        {500, 500, 800, 800, 800, 800, 500, 500},                         // Crossing center
+        {2000, 2000, 3000, 3000, 3000, 3000, 2000, 2000},                 // Mid-board advancing
+        {10000, 10000, 15000, 15000, 15000, 15000, 10000, 10000},          // Deep in enemy territory
+        {50000, 50000, 60000, 60000, 60000, 60000, 50000, 50000},          // Almost there - huge bonus
+        {100000, 100000, 100000, 100000, 100000, 100000, 100000, 100000}  // Goal line - MASSIVE bonus
     };
     
     // Piece values - Pushers are significantly more valuable
@@ -32,9 +32,9 @@ public class BoardEvaluation {
     private static final int CAPTURE_PUSHER_BONUS = 300;
     private static final int CAPTURE_NORMAL_BONUS = 120;
     private static final int CENTER_CONTROL_BONUS = 15;
-    private static final int ADVANCEMENT_BONUS = 25;   // Much higher advancement bonus
+    private static final int ADVANCEMENT_BONUS = 100;   // Much higher advancement bonus
     private static final int PUSHER_MOBILITY_BONUS = 40; // Bonus for pusher moves
-    private static final int NEAR_GOAL_BONUS = 100;    // Extra bonus for being very close to goal
+    private static final int NEAR_GOAL_BONUS = 10000;    // MASSIVE bonus for being very close to goal
     
     /**
      * Evaluates the board position for the given color
@@ -278,7 +278,7 @@ public class BoardEvaluation {
             // Check if we have a piece in the target row
             if ((isRed && (piece == 'R' || piece == 'r')) ||
                 (!isRed && (piece == 'B' || piece == 'b'))) {
-                return 50000; // Huge bonus for winning
+                return 1000000; // MASSIVE bonus for winning - highest possible priority
             }
         }
         

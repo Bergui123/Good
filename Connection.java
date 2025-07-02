@@ -1,8 +1,5 @@
 import java.io.*;
 import java.net.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
 
 
 class Client {
@@ -12,6 +9,7 @@ class Client {
     BufferedOutputStream output;
     Board board = new Board();
     MiniMax miniMax = new MiniMax();
+    String myColor = null; // Track which color this AI is playing
     
     try {
         MyClient = new Socket("localhost", 8888);
@@ -39,6 +37,8 @@ class Client {
             // cmd == '1': Start new game as RED player
             // Receives initial board state and finds best move using AI
             if(cmd == '1'){
+    myColor = "red"; // Set our color
+    System.out.println("Playing as RED");
     // Read the board configuration data
     byte[] aBuffer = new byte[256];
     int size = input.available();
@@ -61,8 +61,10 @@ class Client {
 }
 
 // cmd == '2': Start new game as BLACK player
-// Receives initial board state and uses AI to find best move
+// Receives initial board state and waits for Red to move first
 if(cmd == '2'){
+    myColor = "black"; // Set our color
+    System.out.println("Playing as BLACK - waiting for Red to move first");
     // Read the board configuration data
     byte[] aBuffer = new byte[256];
     int size = input.available();
@@ -73,18 +75,11 @@ if(cmd == '2'){
         board.parseBoardFromServer(boardData);
     }
     board.setRedPlayer(false);
-    System.out.println("Finding best move for BLACK...");
-    String move = miniMax.findBestMove(board, "black");
-    System.out.println("Best move found: " + move);
-    if (move != null) {
-        board.makeMoveFromServer(move);
-        output.write(move.getBytes(), 0, move.length());
-        output.flush();
-        System.out.println("Move sent: " + move);
-    }
+    System.out.println("Black player initialized. Waiting for Red's first move...");
+    // Black does NOT move immediately - waits for command 3 or 4 with Red's move
 }
 
-        // cmd == '3': Server requests next move (BLACK player turn)
+        // cmd == '3': Server requests next move (ongoing game)
         // Receives opponent's last move and responds with AI move
         if(cmd == '3'){
         byte[] aBuffer = new byte[64]; // Increased buffer size
@@ -100,9 +95,13 @@ if(cmd == '2'){
             }
         }
         
-        // Find our best move as black
-        System.out.println("Finding best move for BLACK...");
-        String move = miniMax.findBestMove(board, "black");
+        // Find our best move using our tracked color
+        if (myColor == null) {
+            System.err.println("ERROR: myColor is null! This shouldn't happen.");
+            continue; // Skip this command and wait for proper initialization
+        }
+        System.out.println("Finding best move for " + myColor.toUpperCase() + "...");
+        String move = miniMax.findBestMove(board, myColor);
         System.out.println("Best move found: " + move);
         if (move != null) {
             board.makeMoveFromServer(move);
@@ -113,7 +112,7 @@ if(cmd == '2'){
                 
          }
          
-            // cmd == '4': Server requests next move (RED player turn)
+            // cmd == '4': Server requests next move (ongoing game)
             // Receives opponent's move and responds with AI move
             if(cmd == '4'){
                 byte[] aBuffer = new byte[64]; // Increased buffer size
@@ -128,9 +127,13 @@ if(cmd == '2'){
                     }
                 }
                 
-                // Find our best move as red
-                System.out.println("Finding best move for RED...");
-                String move = miniMax.findBestMove(board, "red");
+                // Find our best move using our tracked color
+                if (myColor == null) {
+                    System.err.println("ERROR: myColor is null! This shouldn't happen.");
+                    continue; // Skip this command and wait for proper initialization
+                }
+                System.out.println("Finding best move for " + myColor.toUpperCase() + "...");
+                String move = miniMax.findBestMove(board, myColor);
                 System.out.println("Best move found: " + move);
                 if (move != null) {
                     board.makeMoveFromServer(move);
